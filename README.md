@@ -1,6 +1,7 @@
-Modifications:
-* Added third-person and on-board camera rendering modes.
-* Made runnable on google colab notebook
+How to run
+train.py is used to train model using DQN
+validation.py used to test model in simulation
+Trained Q policy along with other training metadata is stored in weights/training_checkpoint.pth
 
 # Gym-Medium-Post
 Basic OpenAI gym environment. 
