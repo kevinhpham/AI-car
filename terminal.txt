@@ -1,0 +1,3 @@
+cd Documents/GitHub/AI-car
+conda activate ai4robotics
+python setup.py install

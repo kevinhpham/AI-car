@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot name="obstacle">
+  <link name="obstacle_link">
+    <visual>
+      <geometry>
+        <box size="1 1 1"/> <!-- Dimensions: width=1m, depth=1m, height=1m -->
+      </geometry>
+      <material name="gray">
+        <color rgba="0.5 0.5 0.5 1.0"/> <!-- Gray color -->
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="1 1 1"/> <!-- Same size as the visual geometry -->
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1.0"/> <!-- Mass of the obstacle -->
+      <inertia ixx="0.1" ixy="0.0" ixz="0.0" iyy="0.1" iyz="0.0" izz="0.1"/> <!-- Simplified inertia -->
+    </inertial>
+  </link>
+</robot>
