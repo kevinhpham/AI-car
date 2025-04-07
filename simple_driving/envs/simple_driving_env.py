@@ -23,8 +23,8 @@ class SimpleDrivingEnv(gym.Env):
                 low=np.array([-1, -.6], dtype=np.float32),
                 high=np.array([1, .6], dtype=np.float32))
         self.observation_space = gym.spaces.box.Box(
-            low=np.array([-40, -40], dtype=np.float32),
-            high=np.array([40, 40], dtype=np.float32))
+            low=np.array([-40, -40, -40, -40], dtype=np.float32),
+            high=np.array([40, 40, 40, 40], dtype=np.float32))
         self.np_random, _ = gym.utils.seeding.np_random()
 
         if renders:
@@ -75,10 +75,20 @@ class SimpleDrivingEnv(gym.Env):
                                   # (car_ob[1] - self.goal[1]) ** 2))
         dist_to_goal = math.sqrt(((carpos[0] - goalpos[0]) ** 2 +
                                   (carpos[1] - goalpos[1]) ** 2))
+        
+        dist_to_obstacle = math.sqrt(((car_ob[2])** 2 +
+                                  (car_ob[3]) ** 2))
         # reward = max(self.prev_dist_to_goal - dist_to_goal, 0)
         reward = -dist_to_goal
         self.prev_dist_to_goal = dist_to_goal
 
+        if dist_to_obstacle < 0.75:
+            #print("hit obstacle")
+            reward += -50
+            self.done = True
+        elif dist_to_obstacle < 1:
+            #print("close to obstacle")
+            reward += -2
         # Done by reaching goal
         if dist_to_goal < 1.5 and not self.reached_goal:
             #print("reached goal")
@@ -97,6 +107,7 @@ class SimpleDrivingEnv(gym.Env):
         self._p.resetSimulation()
         self._p.setTimeStep(self._timeStep)
         self._p.setGravity(0, 0, -10)
+
         # Reload the plane and car
         Plane(self._p)
         self.car = Car(self._p)
@@ -104,9 +115,9 @@ class SimpleDrivingEnv(gym.Env):
 
         # Set the goal to a random target
         x = (self.np_random.uniform(5, 9) if self.np_random.integers(2) else
-             self.np_random.uniform(-9, -5))
+            self.np_random.uniform(-9, -5))
         y = (self.np_random.uniform(5, 9) if self.np_random.integers(2) else
-             self.np_random.uniform(-9, -5))
+            self.np_random.uniform(-9, -5))
         self.goal = (x, y)
         self.done = False
         self.reached_goal = False
@@ -114,11 +125,23 @@ class SimpleDrivingEnv(gym.Env):
         # Visual element of the goal
         self.goal_object = Goal(self._p, self.goal)
 
+        # Spawn 3 obstacles at random positions
+        self.obstacles = []  # List to store obstacle positions
+        for _ in range(8):
+            while True:
+                obs_x = self.np_random.uniform(-8, 8)
+                obs_y = self.np_random.uniform(-8, 8)
+                # Check if the obstacle is at least 1m away from the goal
+                if abs(obs_x - self.goal[0]) >= 0.7 and abs(obs_y - self.goal[1]) >= 0.7 and abs(obs_x) >= 1 and abs(obs_y) >= 1:
+                    break  # Valid position found
+            obs_z = 0.5  # Assuming the obstacle is 1m tall, its center is at z=0.5
+            obstacle_id = self._p.loadURDF("simple_driving/resources/obstacle.urdf", basePosition=[obs_x, obs_y, obs_z])
+            self.obstacles.append((obs_x, obs_y))  # Store the (x, y) position of the obstacle
+
         # Get observation to return
         carpos = self.car.get_observation()
-
         self.prev_dist_to_goal = math.sqrt(((carpos[0] - self.goal[0]) ** 2 +
-                                           (carpos[1] - self.goal[1]) ** 2))
+                                            (carpos[1] - self.goal[1]) ** 2))
         car_ob = self.getExtendedObservation()
         return np.array(car_ob, dtype=np.float32)
 
@@ -178,13 +201,34 @@ class SimpleDrivingEnv(gym.Env):
             return np.array([])
 
     def getExtendedObservation(self):
-        # self._observation = []  #self._racecar.getObservation()
+        # Get car and goal positions
         carpos, carorn = self._p.getBasePositionAndOrientation(self.car.car)
         goalpos, goalorn = self._p.getBasePositionAndOrientation(self.goal_object.goal)
         invCarPos, invCarOrn = self._p.invertTransform(carpos, carorn)
         goalPosInCar, goalOrnInCar = self._p.multiplyTransforms(invCarPos, invCarOrn, goalpos, goalorn)
 
-        observation = [goalPosInCar[0], goalPosInCar[1]]
+        # Find the nearest obstacle
+        nearest_obstacle = None
+        min_distance = float('inf')
+        nearest_obs_in_car_frame = (40, 40)  # Default if no obstacles are present
+
+        for obs_x, obs_y in self.obstacles:
+            # Transform obstacle position to car's frame of reference
+            obs_world_pos = (obs_x, obs_y, 0)  # Assuming obstacles are on the ground (z=0)
+            obs_world_orn = (0, 0, 0, 1)  # No rotation for obstacles
+            obs_in_car_frame, _ = self._p.multiplyTransforms(invCarPos, invCarOrn, obs_world_pos, obs_world_orn)
+
+            # Calculate distance to the obstacle in the car's frame
+            distance = math.sqrt(obs_in_car_frame[0]**2 + obs_in_car_frame[1]**2)
+            if distance < min_distance:
+                min_distance = distance
+                nearest_obs_in_car_frame = (obs_in_car_frame[0], obs_in_car_frame[1])
+
+        # Add nearest obstacle's position in the car's frame to the observation
+        nearest_obs_x, nearest_obs_y = nearest_obs_in_car_frame
+
+        # Create the observation
+        observation = [goalPosInCar[0], goalPosInCar[1], nearest_obs_x, nearest_obs_y]
         return observation
 
     def _termination(self):
